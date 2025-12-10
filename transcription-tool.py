@@ -47,6 +47,7 @@ class TranscriptionEngine:
         self.model = model
         self.language = language
         self.is_running = False
+        self.current_process = None
     
     def transcribe_file(self, file_path, output_dir, output_format='txt', callback=None):
         """
@@ -89,13 +90,27 @@ class TranscriptionEngine:
                 bufsize=1
             )
             
+            # Store process reference for stopping
+            self.current_process = process
+            
             # Capture all output line by line
             for line in iter(process.stdout.readline, ''):
+                if not self.is_running:
+                    # Stop was requested, terminate the process
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                    # Don't log here - let transcribe_batch handle the stop message
+                    return False, "Stopped by user"
+                
                 if line:
                     if callback:
                         callback(line.rstrip())
             
             process.wait()
+            self.current_process = None
             
             if process.returncode == 0:
                 output_file = output_dir / f"{file_path.stem}.{output_format}"
@@ -120,14 +135,19 @@ class TranscriptionEngine:
         
         for idx, file_path in enumerate(file_list, 1):
             if not self.is_running:
-                if callback:
-                    callback("\n⏹️  STOPPED by user\n")
+                # Stop message already logged in stop_transcription, just break
                 break
             
             if callback:
                 callback(f"\n{'#'*80}\n[{idx}/{total}] Processing: {Path(file_path).name}\n{'#'*80}")
             
             success, result = self.transcribe_file(file_path, output_dir, output_format, callback)
+            
+            # Check if stopped by user - don't treat as failure
+            if result == "Stopped by user":
+                # Already logged stop message, just break
+                break
+            
             results.append({
                 'file': str(file_path),
                 'success': success,
@@ -139,6 +159,19 @@ class TranscriptionEngine:
     def stop(self):
         """Stop transcription"""
         self.is_running = False
+        # Terminate the current process if it exists
+        if self.current_process:
+            try:
+                self.current_process.terminate()
+                # Wait a bit for graceful termination
+                try:
+                    self.current_process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    # Force kill if it doesn't terminate
+                    self.current_process.kill()
+            except Exception:
+                pass
+            self.current_process = None
 
 
 class TranscriptionGUI:
@@ -187,6 +220,13 @@ class TranscriptionGUI:
         style.configure('Info.TLabel', font=('Arial', 8), foreground=fg_secondary)
         style.configure('Success.TLabel', foreground=success)
         style.configure('Warning.TLabel', foreground=warning)
+        
+        # Configure Checkbutton style for better visibility
+        style.configure('TCheckbutton', background=bg_primary, foreground=fg_primary, font=('Arial', 9))
+        style.map('TCheckbutton',
+                 background=[('active', bg_primary), ('selected', bg_primary)],
+                 foreground=[('active', fg_primary), ('selected', fg_primary)],
+                 indicatorcolor=[('selected', accent), ('!selected', bg_secondary)])
         
         # Configure root background
         self.root.configure(bg=bg_primary)
@@ -277,7 +317,7 @@ class TranscriptionGUI:
         self.model_frame.columnconfigure(1, weight=1)
         self.model_frame.grid_remove()  # Hide by default
         
-        # Output Directory (full path display)
+        # Output Directory (full path display) - always at row 4 (model is at row 3 when visible)
         ttk.Label(settings_frame, text="Output Folder:", style='Header.TLabel').grid(row=4, column=0, sticky='nw', pady=5)
         output_frame = ttk.Frame(settings_frame)
         output_frame.grid(row=4, column=1, sticky='ew', padx=5, pady=5)
@@ -286,25 +326,37 @@ class TranscriptionGUI:
         self.output_path_label = ttk.Label(output_frame, text=str(self.output_directory), 
                                           style='Info.TLabel', wraplength=300)
         self.output_path_label.pack(side='left', fill='x', expand=True)
-        ttk.Button(output_frame, text="Change Folder", command=self.select_output_dir, width=8).pack(side='left', padx=5)
+        ttk.Button(output_frame, text="Change Folder", command=self.select_output_dir, width=14).pack(side='left', padx=5)
         
-        # Action Buttons
+        # Action Buttons (side by side)
         button_frame = ttk.Frame(right_frame)
         button_frame.pack(fill='x', pady=(0, 8))
         
-        self.start_btn = ttk.Button(button_frame, text="▶️  START", command=self.start_transcription, width=16)
-        self.start_btn.pack(pady=3)
+        self.start_btn = ttk.Button(button_frame, text="▶️  START", command=self.start_transcription, width=12)
+        self.start_btn.pack(side='left', padx=3, expand=True, fill='x')
         
-        self.stop_btn = ttk.Button(button_frame, text="⏹️  STOP", command=self.stop_transcription, width=16, state='disabled')
-        self.stop_btn.pack(pady=3)
+        self.stop_btn = ttk.Button(button_frame, text="⏹️  STOP", command=self.stop_transcription, width=12, state='disabled')
+        self.stop_btn.pack(side='left', padx=3, expand=True, fill='x')
         
-        ttk.Button(button_frame, text="📂 Open Folder", command=self.open_output_folder, width=16).pack(pady=3)
+        ttk.Button(button_frame, text="📂 Open Folder", command=self.open_output_folder, width=12).pack(side='left', padx=3, expand=True, fill='x')
+        
+        # Status (below buttons)
+        status_frame = ttk.LabelFrame(right_frame, text="📊 Status", padding=8)
+        status_frame.pack(fill='x', pady=(0, 8))
+        
+        self.status_label = ttk.Label(status_frame, text="Ready", style='Success.TLabel', font=('Arial', 9, 'bold'))
+        self.status_label.pack(anchor='w')
         
         # BOTTOM: Log (reduced height)
         log_frame = ttk.LabelFrame(main_frame, text="📝 Processing Log", padding=8)
         log_frame.grid(row=1, column=0, columnspan=2, sticky='nsew', pady=(8, 0))
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
+        
+        # Log controls
+        log_controls = ttk.Frame(log_frame)
+        log_controls.pack(fill='x', pady=(0, 5))
+        ttk.Button(log_controls, text="🗑️ Clear Logs", command=self.clear_logs, width=12).pack(side='right')
         
         self.log_text = scrolledtext.ScrolledText(log_frame, height=8, font=('Courier', 8),
                                                    wrap='word', bg='#2a2a3e', fg='#00ff88',
@@ -429,6 +481,11 @@ class TranscriptionGUI:
         self.folder_btn.config(state='normal')
         self.files_btn.config(state='normal')
     
+    def clear_logs(self):
+        """Clear the log text"""
+        self.log_text.delete(1.0, tk.END)
+        self.log("📝 Log cleared")
+    
     def log(self, message):
         """Add message to log"""
         self.log_text.insert(tk.END, f"{message}\n")
@@ -449,6 +506,7 @@ class TranscriptionGUI:
         self.is_transcribing = True
         self.start_btn.config(state='disabled')
         self.stop_btn.config(state='normal')
+        self.status_label.config(text="⏳ Processing...", foreground='#ffaa00')
         
         self.log_text.delete(1.0, tk.END)  # Clear log
         self.log(f"{'='*80}")
@@ -477,6 +535,11 @@ class TranscriptionGUI:
                 callback=self.update_progress
             )
             
+            # Check if transcription was stopped
+            if not self.engine.is_running:
+                # Already stopped by user, UI already updated in stop_transcription
+                return
+            
             # Summary
             success_count = sum(1 for r in results if r['success'])
             total_count = len(results)
@@ -487,27 +550,42 @@ class TranscriptionGUI:
             
             # Update UI
             if success_count == total_count:
+                self.status_label.config(text="✅ Completed", foreground='#00ff88')
                 self.root.after(0, lambda: messagebox.showinfo("Success", 
                     f"All {success_count} file(s) transcribed!\n\nOutput: {self.output_directory}"))
             else:
+                self.status_label.config(text=f"⚠️  {success_count}/{total_count} completed", foreground='#ffaa00')
                 self.root.after(0, lambda: messagebox.showwarning("Partial Success",
                     f"{success_count}/{total_count} files completed.\nCheck log for errors."))
         
         except Exception as e:
-            self.log(f"\n❌ FATAL ERROR: {str(e)}\n")
-            self.root.after(0, lambda: messagebox.showerror("Error", f"Failed:\n{str(e)}"))
+            # Only show error if not stopped by user
+            if self.is_transcribing:
+                self.log(f"\n❌ FATAL ERROR: {str(e)}\n")
+                self.status_label.config(text="❌ Error occurred", foreground='#ff4444')
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Failed:\n{str(e)}"))
         
         finally:
-            # Reset button states
-            self.is_transcribing = False
-            self.start_btn.config(state='normal')
-            self.stop_btn.config(state='disabled')
+            # Reset button states only if not already stopped (stop_transcription handles it)
+            if self.is_transcribing:
+                self.is_transcribing = False
+                self.start_btn.config(state='normal')
+                self.stop_btn.config(state='disabled')
     
     def stop_transcription(self):
         """Stop transcription"""
         if self.engine and self.is_transcribing:
+            # Disable stop button immediately to prevent multiple clicks
+            self.stop_btn.config(state='disabled')
+            # Stop the engine
             self.engine.stop()
+            # Update status
+            self.status_label.config(text="⏹️  Stopped", foreground='#ffaa00')
             self.log("\n⏹️  Stopped by user\n")
+            # Reset transcription state
+            self.is_transcribing = False
+            # Re-enable start button
+            self.start_btn.config(state='normal')
     
     def open_output_folder(self):
         """Open output folder in file explorer"""
