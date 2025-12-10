@@ -147,7 +147,7 @@ class TranscriptionGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Transcription Studio")
-        self.root.geometry("1200x700")
+        self.root.geometry("900x550")
         self.root.resizable(True, True)
         
         self.engine = None
@@ -155,6 +155,7 @@ class TranscriptionGUI:
         self.selected_files = []
         self.output_directory = Path.home() / "Transcriptions"
         self.is_transcribing = False
+        self.show_advanced = tk.BooleanVar(value=False)
         
         self.setup_styles()
         self.create_widgets()
@@ -177,10 +178,13 @@ class TranscriptionGUI:
         style.configure('TFrame', background=bg_primary)
         style.configure('TLabel', background=bg_primary, foreground=fg_primary)
         style.configure('TButton', background=bg_secondary, foreground=fg_primary)
+        style.map('TButton',
+                  background=[('active', '#3a3a4e'), ('disabled', '#1a1a2a')],
+                  foreground=[('disabled', '#606060')])
         style.configure('TLabelframe', background=bg_primary, foreground=fg_primary)
         style.configure('TLabelframe.Label', background=bg_primary, foreground=accent)
-        style.configure('Header.TLabel', font=('Arial', 11, 'bold'), foreground=accent)
-        style.configure('Info.TLabel', font=('Arial', 9), foreground=fg_secondary)
+        style.configure('Header.TLabel', font=('Arial', 10, 'bold'), foreground=accent)
+        style.configure('Info.TLabel', font=('Arial', 8), foreground=fg_secondary)
         style.configure('Success.TLabel', foreground=success)
         style.configure('Warning.TLabel', foreground=warning)
         
@@ -191,30 +195,32 @@ class TranscriptionGUI:
         """Create all GUI widgets with side-by-side layout"""
         # Main container
         main_frame = ttk.Frame(self.root)
-        main_frame.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
+        main_frame.grid(row=0, column=0, sticky='nsew', padx=8, pady=8)
         
         # LEFT SIDE: File Selection
         left_frame = ttk.Frame(main_frame)
         left_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
         
-        files_frame = ttk.LabelFrame(left_frame, text="📁 File Selection", padding=10)
-        files_frame.pack(fill='both', expand=True, pady=(0, 10))
+        files_frame = ttk.LabelFrame(left_frame, text="📁 File Selection", padding=8)
+        files_frame.pack(fill='both', expand=True)
         files_frame.columnconfigure(0, weight=1)
         files_frame.rowconfigure(2, weight=1)
         
         # Buttons
         button_frame = ttk.Frame(files_frame)
-        button_frame.grid(row=0, column=0, sticky='ew', pady=(0, 10))
-        ttk.Button(button_frame, text="📂 Folder", command=self.select_folder, width=12).pack(side='left', padx=2)
-        ttk.Button(button_frame, text="📄 Files", command=self.select_files, width=12).pack(side='left', padx=2)
-        ttk.Button(button_frame, text="🗑️ Clear", command=self.clear_selection, width=12).pack(side='left', padx=2)
+        button_frame.grid(row=0, column=0, sticky='ew', pady=(0, 8))
+        self.folder_btn = ttk.Button(button_frame, text="📂 Folder", command=self.select_folder, width=10)
+        self.folder_btn.pack(side='left', padx=2)
+        self.files_btn = ttk.Button(button_frame, text="📄 Files", command=self.select_files, width=10)
+        self.files_btn.pack(side='left', padx=2)
+        ttk.Button(button_frame, text="🗑️ Clear", command=self.clear_selection, width=10).pack(side='left', padx=2)
         
         # File count
-        ttk.Label(files_frame, text="Selected Files:", style='Header.TLabel').grid(row=1, column=0, sticky='w')
+        ttk.Label(files_frame, text="Selected Files:", style='Header.TLabel').grid(row=1, column=0, sticky='w', pady=(0, 5))
         self.file_count_label = ttk.Label(files_frame, text="0 files", style='Info.TLabel')
-        self.file_count_label.grid(row=1, column=0, sticky='e')
+        self.file_count_label.grid(row=1, column=0, sticky='e', pady=(0, 5))
         
-        # File list
+        # File list (reduced height)
         list_frame = ttk.Frame(files_frame)
         list_frame.grid(row=2, column=0, sticky='nsew')
         list_frame.columnconfigure(0, weight=1)
@@ -223,97 +229,105 @@ class TranscriptionGUI:
         scrollbar = ttk.Scrollbar(list_frame)
         scrollbar.pack(side='right', fill='y')
         
-        self.file_listbox = tk.Listbox(list_frame, height=15, yscrollcommand=scrollbar.set, 
-                                       font=('Courier', 9), bg='#2a2a3e', fg='#e0e0e0')
+        self.file_listbox = tk.Listbox(list_frame, height=8, yscrollcommand=scrollbar.set, 
+                                       font=('Courier', 8), bg='#2a2a3e', fg='#e0e0e0',
+                                       selectbackground='#00d9ff', selectforeground='#1e1e2e')
         self.file_listbox.pack(side='left', fill='both', expand=True)
         self.file_listbox.bind('<Double-Button-1>', self.remove_selected_file)
         scrollbar.config(command=self.file_listbox.yview)
         
-        ttk.Label(files_frame, text="Double-click to remove", style='Info.TLabel').grid(row=3, column=0, sticky='w', pady=(5, 0))
+        ttk.Label(files_frame, text="Double-click to remove", style='Info.TLabel').grid(row=3, column=0, sticky='w', pady=(3, 0))
         
         # RIGHT SIDE: Settings
         right_frame = ttk.Frame(main_frame)
         right_frame.grid(row=0, column=1, sticky='nsew', padx=(5, 0))
         
-        settings_frame = ttk.LabelFrame(right_frame, text="⚙️ Settings", padding=15)
-        settings_frame.pack(fill='x', pady=(0, 10))
+        settings_frame = ttk.LabelFrame(right_frame, text="⚙️ Settings", padding=10)
+        settings_frame.pack(fill='x', pady=(0, 8))
         
-        # Model
-        ttk.Label(settings_frame, text="Model:", style='Header.TLabel').grid(row=0, column=0, sticky='w', pady=10)
-        self.model_var = tk.StringVar(value=TranscriptionConfig.DEFAULT_MODEL)
-        model_combo = ttk.Combobox(settings_frame, textvariable=self.model_var,
-                                   values=TranscriptionConfig.WHISPER_MODELS, state='readonly', width=15)
-        model_combo.grid(row=0, column=1, sticky='ew', padx=10, pady=10)
-        ttk.Label(settings_frame, text="tiny=fast | large=accurate", style='Info.TLabel').grid(row=0, column=2, sticky='w')
+        # Advanced Settings Toggle
+        toggle_frame = ttk.Frame(settings_frame)
+        toggle_frame.grid(row=0, column=0, columnspan=3, sticky='ew', pady=(0, 5))
+        ttk.Checkbutton(toggle_frame, text="Show Advanced Settings", variable=self.show_advanced,
+                       command=self.toggle_advanced_settings).pack(side='left')
         
-        # Language
-        ttk.Label(settings_frame, text="Language:", style='Header.TLabel').grid(row=1, column=0, sticky='w', pady=10)
+        # Language (always visible)
+        ttk.Label(settings_frame, text="Language:", style='Header.TLabel').grid(row=1, column=0, sticky='w', pady=5)
         self.language_var = tk.StringVar(value=TranscriptionConfig.DEFAULT_LANGUAGE)
         lang_combo = ttk.Combobox(settings_frame, textvariable=self.language_var,
-                                  values=TranscriptionConfig.LANGUAGES, state='readonly', width=15)
-        lang_combo.grid(row=1, column=1, sticky='ew', padx=10, pady=10)
-        ttk.Label(settings_frame, text="en=English | te=Telugu", style='Info.TLabel').grid(row=1, column=2, sticky='w')
+                                  values=TranscriptionConfig.LANGUAGES, state='readonly', width=18)
+        lang_combo.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
+        settings_frame.columnconfigure(1, weight=1)
         
-        # Format
-        ttk.Label(settings_frame, text="Format:", style='Header.TLabel').grid(row=2, column=0, sticky='w', pady=10)
+        # Format (always visible)
+        ttk.Label(settings_frame, text="Format:", style='Header.TLabel').grid(row=2, column=0, sticky='w', pady=5)
         self.format_var = tk.StringVar(value='txt')
         format_combo = ttk.Combobox(settings_frame, textvariable=self.format_var,
-                                    values=TranscriptionConfig.OUTPUT_FORMATS, state='readonly', width=15)
-        format_combo.grid(row=2, column=1, sticky='ew', padx=10, pady=10)
-        ttk.Label(settings_frame, text="txt=text | srt=subtitles", style='Info.TLabel').grid(row=2, column=2, sticky='w')
+                                    values=TranscriptionConfig.OUTPUT_FORMATS, state='readonly', width=18)
+        format_combo.grid(row=2, column=1, sticky='ew', padx=5, pady=5)
         
-        # Output Directory
-        ttk.Label(settings_frame, text="Output:", style='Header.TLabel').grid(row=3, column=0, sticky='nw', pady=10)
+        # Model (hidden by default - advanced setting)
+        self.model_frame = ttk.Frame(settings_frame)
+        self.model_frame.grid(row=3, column=0, columnspan=2, sticky='ew', pady=5)
+        ttk.Label(self.model_frame, text="Model:", style='Header.TLabel').grid(row=0, column=0, sticky='w', pady=5)
+        self.model_var = tk.StringVar(value=TranscriptionConfig.DEFAULT_MODEL)
+        model_combo = ttk.Combobox(self.model_frame, textvariable=self.model_var,
+                                   values=TranscriptionConfig.WHISPER_MODELS, state='readonly', width=18)
+        model_combo.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        self.model_frame.columnconfigure(1, weight=1)
+        self.model_frame.grid_remove()  # Hide by default
+        
+        # Output Directory (full path display)
+        ttk.Label(settings_frame, text="Output Folder:", style='Header.TLabel').grid(row=4, column=0, sticky='nw', pady=5)
         output_frame = ttk.Frame(settings_frame)
-        output_frame.grid(row=3, column=1, columnspan=2, sticky='ew', padx=10, pady=10)
+        output_frame.grid(row=4, column=1, sticky='ew', padx=5, pady=5)
         output_frame.columnconfigure(0, weight=1)
         
-        self.output_path_label = ttk.Label(output_frame, text=self.output_directory.name, style='Info.TLabel')
+        self.output_path_label = ttk.Label(output_frame, text=str(self.output_directory), 
+                                          style='Info.TLabel', wraplength=300)
         self.output_path_label.pack(side='left', fill='x', expand=True)
-        ttk.Button(output_frame, text="Change", command=self.select_output_dir, width=8).pack(side='left', padx=5)
-        
-        # Separator
-        ttk.Separator(right_frame, orient='horizontal').pack(fill='x', pady=10)
+        ttk.Button(output_frame, text="Change Folder", command=self.select_output_dir, width=8).pack(side='left', padx=5)
         
         # Action Buttons
         button_frame = ttk.Frame(right_frame)
-        button_frame.pack(fill='x')
+        button_frame.pack(fill='x', pady=(0, 8))
         
-        self.start_btn = ttk.Button(button_frame, text="▶️  START", command=self.start_transcription, width=18)
-        self.start_btn.pack(pady=5)
+        self.start_btn = ttk.Button(button_frame, text="▶️  START", command=self.start_transcription, width=16)
+        self.start_btn.pack(pady=3)
         
-        self.stop_btn = ttk.Button(button_frame, text="⏹️  STOP", command=self.stop_transcription, width=18, state='disabled')
-        self.stop_btn.pack(pady=5)
+        self.stop_btn = ttk.Button(button_frame, text="⏹️  STOP", command=self.stop_transcription, width=16, state='disabled')
+        self.stop_btn.pack(pady=3)
         
-        ttk.Button(button_frame, text="📂 Open Folder", command=self.open_output_folder, width=18).pack(pady=5)
+        ttk.Button(button_frame, text="📂 Open Folder", command=self.open_output_folder, width=16).pack(pady=3)
         
-        # Status
-        status_frame = ttk.LabelFrame(right_frame, text="📊 Status", padding=10)
-        status_frame.pack(fill='x', pady=10)
-        
-        self.status_label = ttk.Label(status_frame, text="Ready", style='Success.TLabel', font=('Arial', 10, 'bold'))
-        self.status_label.pack(anchor='w')
-        
-        # BOTTOM: Log
-        log_frame = ttk.LabelFrame(main_frame, text="📝 Processing Log", padding=10)
-        log_frame.grid(row=1, column=0, columnspan=2, sticky='nsew', pady=(10, 0))
+        # BOTTOM: Log (reduced height)
+        log_frame = ttk.LabelFrame(main_frame, text="📝 Processing Log", padding=8)
+        log_frame.grid(row=1, column=0, columnspan=2, sticky='nsew', pady=(8, 0))
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
         
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=15, font=('Courier', 9),
-                                                   wrap='word', bg='#2a2a3e', fg='#00ff88')
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=8, font=('Courier', 8),
+                                                   wrap='word', bg='#2a2a3e', fg='#00ff88',
+                                                   insertbackground='#00ff88')
         self.log_text.pack(fill='both', expand=True)
         
         # Grid configuration
         main_frame.columnconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(0, weight=2)
+        main_frame.rowconfigure(0, weight=1)
         main_frame.rowconfigure(1, weight=1)
     
     def setup_grid_weights(self):
         """Configure grid weights"""
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+    
+    def toggle_advanced_settings(self):
+        """Show/hide advanced settings"""
+        if self.show_advanced.get():
+            self.model_frame.grid()
+        else:
+            self.model_frame.grid_remove()
     
     def remove_selected_file(self, event):
         """Remove selected file from list"""
@@ -345,13 +359,22 @@ class TranscriptionGUI:
                 if file not in self.selected_files:
                     self.selected_files.append(file)
             self.update_file_list()
+            # Set output directory in the same folder as the first selected file
+            if self.selected_files:
+                first_file_path = Path(self.selected_files[0])
+                self.output_directory = first_file_path.parent / "transcriptions"
+                self.output_path_label.config(text=str(self.output_directory))
+                self.log(f"📂 Output folder set to: {self.output_directory}")
+            # Disable selection buttons after files are selected
+            self.folder_btn.config(state='disabled')
+            self.files_btn.config(state='disabled')
     
     def select_output_dir(self):
         """Select output directory"""
         directory = filedialog.askdirectory(title="Select Output Directory")
         if directory:
             self.output_directory = Path(directory)
-            self.output_path_label.config(text=self.output_directory.name)
+            self.output_path_label.config(text=str(self.output_directory))
             self.log(f"📂 Output: {self.output_directory}")
     
     def load_files_from_folder(self, folder):
@@ -371,8 +394,21 @@ class TranscriptionGUI:
                     self.selected_files.append(f)
             self.update_file_list()
             self.log(f"✅ Loaded {len(files)} file(s) from '{folder_path.name}'")
+            # Set output directory within the selected folder
+            self.output_directory = folder_path / "transcriptions"
+            self.output_path_label.config(text=str(self.output_directory))
+            self.log(f"📂 Output folder set to: {self.output_directory}")
+            # Disable selection buttons after folder is selected
+            self.folder_btn.config(state='disabled')
+            self.files_btn.config(state='disabled')
         else:
             messagebox.showwarning("No Files", f"No media files found in:\n{folder_path}")
+            # Set output directory even if no files found
+            self.output_directory = folder_path / "transcriptions"
+            self.output_path_label.config(text=str(self.output_directory))
+            # Disable buttons even if no files found (user made a selection attempt)
+            self.folder_btn.config(state='disabled')
+            self.files_btn.config(state='disabled')
     
     def update_file_list(self):
         """Update the file listbox display"""
@@ -389,6 +425,9 @@ class TranscriptionGUI:
         self.selected_files = []
         self.update_file_list()
         self.log("🗑️  All files cleared")
+        # Re-enable selection buttons after clearing
+        self.folder_btn.config(state='normal')
+        self.files_btn.config(state='normal')
     
     def log(self, message):
         """Add message to log"""
@@ -410,15 +449,14 @@ class TranscriptionGUI:
         self.is_transcribing = True
         self.start_btn.config(state='disabled')
         self.stop_btn.config(state='normal')
-        self.status_label.config(text="⏳ Processing...", foreground='#ffaa00')
         
         self.log_text.delete(1.0, tk.END)  # Clear log
-        self.log(f"{'='*90}")
+        self.log(f"{'='*80}")
         self.log(f"🚀 STARTING TRANSCRIPTION")
-        self.log(f"{'='*90}")
+        self.log(f"{'='*80}")
         self.log(f"📊 Files: {len(self.selected_files)} | Model: {self.model_var.get()} | Language: {self.language_var.get()}")
-        self.log(f"📄 Format: {self.format_var.get()} | Output: {self.output_directory.name}")
-        self.log(f"{'='*90}\n")
+        self.log(f"📄 Format: {self.format_var.get()} | Output: {self.output_directory}")
+        self.log(f"{'='*80}\n")
         
         self.engine = TranscriptionEngine(
             model=self.model_var.get(),
@@ -443,23 +481,20 @@ class TranscriptionGUI:
             success_count = sum(1 for r in results if r['success'])
             total_count = len(results)
             
-            self.log(f"\n{'='*90}")
+            self.log(f"\n{'='*80}")
             self.log(f"✅ COMPLETE: {success_count}/{total_count} successful")
-            self.log(f"{'='*90}\n")
+            self.log(f"{'='*80}\n")
             
             # Update UI
             if success_count == total_count:
-                self.status_label.config(text="✅ All files transcribed!", foreground='#00ff88')
                 self.root.after(0, lambda: messagebox.showinfo("Success", 
                     f"All {success_count} file(s) transcribed!\n\nOutput: {self.output_directory}"))
             else:
-                self.status_label.config(text=f"⚠️  {success_count}/{total_count} successful", foreground='#ffaa00')
                 self.root.after(0, lambda: messagebox.showwarning("Partial Success",
                     f"{success_count}/{total_count} files completed.\nCheck log for errors."))
         
         except Exception as e:
             self.log(f"\n❌ FATAL ERROR: {str(e)}\n")
-            self.status_label.config(text="❌ Error occurred", foreground='#ff4444')
             self.root.after(0, lambda: messagebox.showerror("Error", f"Failed:\n{str(e)}"))
         
         finally:
@@ -472,7 +507,7 @@ class TranscriptionGUI:
         """Stop transcription"""
         if self.engine and self.is_transcribing:
             self.engine.stop()
-            self.status_label.config(text="⏹️  Stopped by user", foreground='#ffaa00')
+            self.log("\n⏹️  Stopped by user\n")
     
     def open_output_folder(self):
         """Open output folder in file explorer"""
