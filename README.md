@@ -58,54 +58,46 @@ Both commands will display the Whisper help/usage text if Whisper is installed c
 
 If the `whisper` command is not recognized, you may need to add Python's Scripts directory to your system PATH.
 
-### Step 3: Install ffmpeg
+### Step 3: Install ffmpeg (Automatic with requirements.txt)
 
-**ffmpeg is required** for Whisper to process audio and video files. The application will check for ffmpeg before starting transcription.
+**ffmpeg is required** for Whisper to process audio and video files.
 
-#### Windows Installation
+**✅ Easiest Method (Recommended - Already Included):**
 
-**Option 1: Using Winget (Windows 10/11)**
+If you installed from `requirements.txt`, `imageio-ffmpeg` is already included! This provides a bundled ffmpeg binary that works automatically - **no system installation or PATH configuration needed**.
+
 ```bash
-winget install ffmpeg
+pip install imageio-ffmpeg
 ```
 
-**Option 2: Using Chocolatey**
+The application will automatically detect and use this bundled ffmpeg. This is the recommended method for new users as it requires no additional setup.
+
+**Alternative: System Installation**
+
+If you prefer system installation (optional):
+
+#### Windows
+
 ```bash
+winget install ffmpeg
+# or
 choco install ffmpeg
 ```
 
-**Option 3: Manual Installation**
-1. Download ffmpeg from [ffmpeg.org](https://ffmpeg.org/download.html)
-2. Extract the zip file to a location (e.g., `C:\ffmpeg`)
-3. Add ffmpeg to your system PATH:
-   - Open System Properties → Environment Variables
-   - Add `C:\ffmpeg\bin` to the PATH variable
-4. Restart your terminal/application
-5. Verify installation: `ffmpeg -version`
-
-#### macOS Installation
+#### macOS
 
 ```bash
 brew install ffmpeg
 ```
 
-#### Linux Installation
+#### Linux
 
-**Debian/Ubuntu:**
 ```bash
-sudo apt-get update
-sudo apt-get install ffmpeg
+sudo apt-get install ffmpeg  # Debian/Ubuntu
+sudo yum install ffmpeg      # CentOS/RHEL
 ```
 
-**CentOS/RHEL:**
-```bash
-sudo yum install ffmpeg
-```
-
-**Verify Installation:**
-```bash
-ffmpeg -version
-```
+**Note:** The application automatically detects and uses the bundled ffmpeg from `imageio-ffmpeg` if available, or falls back to system ffmpeg if installed. You don't need both!
 
 ## 💻 Running the Application
 
@@ -240,13 +232,24 @@ If you get an error that `whisper` command is not found:
 
 If you get a `FileNotFoundError: [WinError 2] The system cannot find the file specified` error:
 
-1. **Install ffmpeg** (see Step 3 in Installation section above)
-2. **Verify ffmpeg is in PATH**: Open a new terminal and run `ffmpeg -version`
-3. **Restart the application** after installing ffmpeg
-4. If the error persists:
-   - Make sure ffmpeg is added to your system PATH
+1. **Easiest Fix (Recommended):** Install the bundled ffmpeg via pip:
+
+   ```bash
+   pip install imageio-ffmpeg
+   ```
+
+   This requires no system configuration or PATH setup. Restart the application after installation.
+
+2. **Alternative:** Install system ffmpeg (see Step 3 in Installation section above)
+
+3. **Verify installation:** The application will automatically detect ffmpeg on startup. If using system ffmpeg, verify it's in PATH by running `ffmpeg -version` in a terminal.
+
+4. **Restart the application** after installing ffmpeg
+
+5. If the error persists:
+   - Make sure you restarted the application after installation
+   - For system ffmpeg: ensure it's added to your system PATH
    - Try restarting your computer
-   - Check that you're using the correct ffmpeg executable for your system (32-bit vs 64-bit)
 
 ## 📝 Notes
 

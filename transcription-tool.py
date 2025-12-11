@@ -34,6 +34,15 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
+# Try to import imageio-ffmpeg for bundled ffmpeg (no system installation needed)
+try:
+    import imageio_ffmpeg
+    FFMPEG_EXE = imageio_ffmpeg.get_ffmpeg_exe()
+    FFMPEG_AVAILABLE = True
+except ImportError:
+    FFMPEG_EXE = None
+    FFMPEG_AVAILABLE = False
+
 
 class TranscriptionConfig:
     """Configuration for transcription settings"""
@@ -61,7 +70,22 @@ class TranscriptionEngine:
         self.current_process = None
     
     def check_ffmpeg_installed(self):
-        """Check if ffmpeg is installed and accessible"""
+        """Check if ffmpeg is installed and accessible (bundled or system)"""
+        # First check if imageio-ffmpeg bundled ffmpeg is available
+        if FFMPEG_AVAILABLE and FFMPEG_EXE:
+            try:
+                result = subprocess.run(
+                    [FFMPEG_EXE, '-version'],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    return True
+            except Exception:
+                pass
+        
+        # Fallback to system ffmpeg
         try:
             result = subprocess.run(
                 ['ffmpeg', '-version'],
@@ -88,12 +112,14 @@ class TranscriptionEngine:
                 error_msg = (
                     "\n❌ ERROR: ffmpeg is not installed or not in PATH.\n"
                     "Whisper requires ffmpeg to process audio/video files.\n\n"
-                    "📥 To install ffmpeg on Windows:\n"
-                    "   1. Download from: https://ffmpeg.org/download.html\n"
-                    "   2. Or use chocolatey: choco install ffmpeg\n"
-                    "   3. Or use winget: winget install ffmpeg\n"
-                    "   4. Make sure ffmpeg is added to your system PATH\n"
-                    "   5. Restart the application after installation\n"
+                    "📥 EASIEST WAY (Recommended):\n"
+                    "   pip install imageio-ffmpeg\n"
+                    "   (No system installation or PATH configuration needed)\n\n"
+                    "📥 Alternative - System Installation:\n"
+                    "   Windows: winget install ffmpeg\n"
+                    "   macOS: brew install ffmpeg\n"
+                    "   Linux: sudo apt-get install ffmpeg\n\n"
+                    "After installation, restart this application.\n"
                 )
                 if callback:
                     callback(error_msg)
@@ -133,6 +159,17 @@ class TranscriptionEngine:
             if sys.platform == 'win32':
                 env['PYTHONIOENCODING'] = 'utf-8'
                 env['PYTHONLEGACYWINDOWSSTDIO'] = '0'
+            
+            # Add bundled ffmpeg to PATH if available (so Whisper can find it)
+            if FFMPEG_AVAILABLE and FFMPEG_EXE:
+                ffmpeg_dir = str(Path(FFMPEG_EXE).parent)
+                current_path = env.get('PATH', '')
+                # Add to PATH if not already there
+                if ffmpeg_dir not in current_path:
+                    if sys.platform == 'win32':
+                        env['PATH'] = f"{ffmpeg_dir};{current_path}"
+                    else:
+                        env['PATH'] = f"{ffmpeg_dir}:{current_path}"
             
             # Run whisper with real-time output capture
             process = subprocess.Popen(
@@ -614,10 +651,13 @@ class TranscriptionGUI:
             messagebox.showerror(
                 "ffmpeg Not Found",
                 "ffmpeg is required but not found on your system.\n\n"
-                "Please install ffmpeg:\n"
-                "• Download: https://ffmpeg.org/download.html\n"
-                "• Or use: choco install ffmpeg\n"
-                "• Or use: winget install ffmpeg\n\n"
+                "EASIEST WAY (Recommended):\n"
+                "• pip install imageio-ffmpeg\n"
+                "(No system installation or PATH needed)\n\n"
+                "Alternative - System Installation:\n"
+                "• Windows: winget install ffmpeg\n"
+                "• macOS: brew install ffmpeg\n"
+                "• Linux: sudo apt-get install ffmpeg\n\n"
                 "After installation, restart this application."
             )
             return
