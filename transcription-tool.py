@@ -60,6 +60,19 @@ class TranscriptionEngine:
         self.is_running = False
         self.current_process = None
     
+    def check_ffmpeg_installed(self):
+        """Check if ffmpeg is installed and accessible"""
+        try:
+            result = subprocess.run(
+                ['ffmpeg', '-version'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=5
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return False
+    
     def transcribe_file(self, file_path, output_dir, output_format='txt', callback=None):
         """
         Transcribe a single file
@@ -70,6 +83,22 @@ class TranscriptionEngine:
             callback: Function to call with status updates
         """
         try:
+            # Check if ffmpeg is installed
+            if not self.check_ffmpeg_installed():
+                error_msg = (
+                    "\n❌ ERROR: ffmpeg is not installed or not in PATH.\n"
+                    "Whisper requires ffmpeg to process audio/video files.\n\n"
+                    "📥 To install ffmpeg on Windows:\n"
+                    "   1. Download from: https://ffmpeg.org/download.html\n"
+                    "   2. Or use chocolatey: choco install ffmpeg\n"
+                    "   3. Or use winget: winget install ffmpeg\n"
+                    "   4. Make sure ffmpeg is added to your system PATH\n"
+                    "   5. Restart the application after installation\n"
+                )
+                if callback:
+                    callback(error_msg)
+                return False, "ffmpeg not found"
+            
             file_path = Path(file_path)
             output_dir = Path(output_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -576,6 +605,23 @@ class TranscriptionGUI:
             messagebox.showwarning("No Files", "Please select at least one file to transcribe.")
             return
         
+        # Check ffmpeg before starting
+        temp_engine = TranscriptionEngine(
+            model=self.model_var.get(),
+            language=self.language_var.get()
+        )
+        if not temp_engine.check_ffmpeg_installed():
+            messagebox.showerror(
+                "ffmpeg Not Found",
+                "ffmpeg is required but not found on your system.\n\n"
+                "Please install ffmpeg:\n"
+                "• Download: https://ffmpeg.org/download.html\n"
+                "• Or use: choco install ffmpeg\n"
+                "• Or use: winget install ffmpeg\n\n"
+                "After installation, restart this application."
+            )
+            return
+        
         # Update button states
         self.is_transcribing = True
         self.start_btn.config(state='disabled')
@@ -590,10 +636,7 @@ class TranscriptionGUI:
         self.log(f"📄 Format: {self.format_var.get()} | Output: {self.output_directory}")
         self.log(f"{'='*80}\n")
         
-        self.engine = TranscriptionEngine(
-            model=self.model_var.get(),
-            language=self.language_var.get()
-        )
+        self.engine = temp_engine
         self.engine.is_running = True
         
         self.worker_thread = threading.Thread(target=self.transcription_worker, daemon=True)

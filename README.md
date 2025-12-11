@@ -18,6 +18,7 @@ A modern, user-friendly desktop application for transcribing video and audio fil
 
 - **Python**: 3.12.0
 - **Whisper CLI**: The application uses the `whisper` command-line tool
+- **ffmpeg**: Required for processing audio/video files
 
 ## 🚀 Installation
 
@@ -56,6 +57,55 @@ python -m whisper -h
 Both commands will display the Whisper help/usage text if Whisper is installed correctly.
 
 If the `whisper` command is not recognized, you may need to add Python's Scripts directory to your system PATH.
+
+### Step 3: Install ffmpeg
+
+**ffmpeg is required** for Whisper to process audio and video files. The application will check for ffmpeg before starting transcription.
+
+#### Windows Installation
+
+**Option 1: Using Winget (Windows 10/11)**
+```bash
+winget install ffmpeg
+```
+
+**Option 2: Using Chocolatey**
+```bash
+choco install ffmpeg
+```
+
+**Option 3: Manual Installation**
+1. Download ffmpeg from [ffmpeg.org](https://ffmpeg.org/download.html)
+2. Extract the zip file to a location (e.g., `C:\ffmpeg`)
+3. Add ffmpeg to your system PATH:
+   - Open System Properties → Environment Variables
+   - Add `C:\ffmpeg\bin` to the PATH variable
+4. Restart your terminal/application
+5. Verify installation: `ffmpeg -version`
+
+#### macOS Installation
+
+```bash
+brew install ffmpeg
+```
+
+#### Linux Installation
+
+**Debian/Ubuntu:**
+```bash
+sudo apt-get update
+sudo apt-get install ffmpeg
+```
+
+**CentOS/RHEL:**
+```bash
+sudo yum install ffmpeg
+```
+
+**Verify Installation:**
+```bash
+ffmpeg -version
+```
 
 ## 💻 Running the Application
 
@@ -185,6 +235,18 @@ If you get an error that `whisper` command is not found:
 - The application automatically creates the `transcriptions` folder in your selected directory
 - If you manually change the output folder, make sure you have write permissions
 - Check the Processing Log for any error messages
+
+### ffmpeg Not Found Error
+
+If you get a `FileNotFoundError: [WinError 2] The system cannot find the file specified` error:
+
+1. **Install ffmpeg** (see Step 3 in Installation section above)
+2. **Verify ffmpeg is in PATH**: Open a new terminal and run `ffmpeg -version`
+3. **Restart the application** after installing ffmpeg
+4. If the error persists:
+   - Make sure ffmpeg is added to your system PATH
+   - Try restarting your computer
+   - Check that you're using the correct ffmpeg executable for your system (32-bit vs 64-bit)
 
 ## 📝 Notes
 
