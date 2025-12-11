@@ -23,6 +23,17 @@ from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
+# Set UTF-8 encoding for Windows console
+if sys.platform == 'win32':
+    import io
+    # Set console code page to UTF-8
+    try:
+        os.system('chcp 65001 >nul 2>&1')
+    except:
+        pass
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 
 class TranscriptionConfig:
     """Configuration for transcription settings"""
@@ -66,7 +77,8 @@ class TranscriptionEngine:
             if callback:
                 callback(f"\n{'='*80}\n📍 Processing: {file_path.name}\n{'='*80}")
             
-            # Build whisper command
+            # Build whisper command with optimized parameters for better accuracy
+            # Using lower temperature and beam search for more consistent, accurate results
             cmd = [
                 'whisper',
                 str(file_path),
@@ -74,11 +86,24 @@ class TranscriptionEngine:
                 '--language', self.language,
                 '--task', 'transcribe',
                 '--output_format', output_format,
-                '--output_dir', str(output_dir)
+                '--output_dir', str(output_dir),
+                '--temperature', '0.0',  # Lower temperature for more consistent results
+                '--beam_size', '5'  # Beam search for better accuracy (especially for Telugu)
             ]
+            
+            # For Telugu and other Indic languages, recommend larger models
+            if self.language == 'te' and self.model in ['tiny', 'base']:
+                if callback:
+                    callback(f"\n⚠️  WARNING: For better Telugu accuracy, consider using 'small', 'medium', or 'large' model.\n")
             
             if callback:
                 callback(f"\n$ {' '.join(cmd)}\n")
+            
+            # Prepare environment with UTF-8 encoding for Windows
+            env = os.environ.copy()
+            if sys.platform == 'win32':
+                env['PYTHONIOENCODING'] = 'utf-8'
+                env['PYTHONLEGACYWINDOWSSTDIO'] = '0'
             
             # Run whisper with real-time output capture
             process = subprocess.Popen(
@@ -86,8 +111,11 @@ class TranscriptionEngine:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding='utf-8',
+                errors='replace',  # Replace problematic characters instead of failing
                 universal_newlines=True,
-                bufsize=1
+                bufsize=1,
+                env=env
             )
             
             # Store process reference for stopping
@@ -114,9 +142,44 @@ class TranscriptionEngine:
             
             if process.returncode == 0:
                 output_file = output_dir / f"{file_path.stem}.{output_format}"
-                if callback:
-                    callback(f"\n✅ SUCCESS: {file_path.name}")
-                    callback(f"📄 Output: {output_file.name}\n")
+                
+                # Verify output file content, especially for Telugu
+                if output_file.exists():
+                    try:
+                        with open(output_file, 'r', encoding='utf-8', errors='replace') as f:
+                            content = f.read().strip()
+                            
+                        if callback:
+                            callback(f"\n✅ SUCCESS: {file_path.name}")
+                            callback(f"📄 Output: {output_file.name}")
+                            
+                            # Show preview of transcribed content
+                            if content:
+                                preview = content[:200] if len(content) > 200 else content
+                                # Check if content is mostly commas or punctuation (potential issue)
+                                non_punct = ''.join(c for c in content if c.isalnum() or c.isspace())
+                                if len(non_punct.strip()) < len(content) * 0.1:  # Less than 10% actual text
+                                    callback(f"\n⚠️  WARNING: Output appears to contain mostly punctuation.")
+                                    callback(f"   This may indicate audio quality issues or model limitations.")
+                                    if self.language == 'te':
+                                        callback(f"   💡 TIP: Try using a larger model (medium/large) for better Telugu accuracy.")
+                                else:
+                                    callback(f"\n📝 Preview: {preview}...")
+                                    if len(content) > 200:
+                                        callback(f"   (Showing first 200 characters of {len(content)} total)")
+                            else:
+                                callback(f"\n⚠️  WARNING: Output file is empty!")
+                            callback("")
+                    except Exception as e:
+                        if callback:
+                            callback(f"\n✅ SUCCESS: {file_path.name}")
+                            callback(f"📄 Output: {output_file.name}")
+                            callback(f"⚠️  Could not read output file: {str(e)}\n")
+                else:
+                    if callback:
+                        callback(f"\n✅ SUCCESS: {file_path.name}")
+                        callback(f"📄 Output: {output_file.name} (file not found)\n")
+                
                 return True, str(output_file)
             else:
                 if callback:
@@ -297,6 +360,7 @@ class TranscriptionGUI:
         lang_combo = ttk.Combobox(settings_frame, textvariable=self.language_var,
                                   values=TranscriptionConfig.LANGUAGES, state='readonly', width=18)
         lang_combo.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
+        lang_combo.bind('<<ComboboxSelected>>', self.on_language_change)
         settings_frame.columnconfigure(1, weight=1)
         
         # Format (always visible)
@@ -373,6 +437,16 @@ class TranscriptionGUI:
         """Configure grid weights"""
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+    
+    def on_language_change(self, event=None):
+        """Handle language selection change"""
+        selected_lang = self.language_var.get()
+        if selected_lang == 'te':
+            current_model = self.model_var.get()
+            if current_model in ['tiny', 'base']:
+                self.log("💡 TIP: For better Telugu accuracy, enable 'Advanced Settings' and select 'medium' or 'large' model.")
+            elif current_model == 'small':
+                self.log("💡 TIP: For even better Telugu accuracy, try 'medium' or 'large' model in Advanced Settings.")
     
     def toggle_advanced_settings(self):
         """Show/hide advanced settings"""
